@@ -1,0 +1,97 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+library(sleuth)
+library(limma)
+library(tximport)
+library(rhdf5)
+library(edgeR)
+library(dplyr)
+library(tidyverse)
+```
+
+```{r}
+rm(list = ls())
+
+# Set the path to the directory containing the subdirectories with Kallisto output
+dir <- "../kallisto_output/"
+
+# Create a vector of the sample names
+sample_names <- c(
+  "D_CeMbio_1_kallisto", "D_CeMbio_2_kallisto", "D_CeMbio_3_kallisto",
+  "A_CeMbio_1_kallisto", "A_CeMbio_2_kallisto", "A_CeMbio_3_kallisto",
+  "B_CeMbio_1_kallisto", "B_CeMbio_2_kallisto", "B_CeMbio_3_kallisto",
+  "C_CeMbio_1_kallisto", "C_CeMbio_2_kallisto", "C_CeMbio_3_kallisto",
+  "D_OP50_1_kallisto", "D_OP50_2_kallisto", "D_OP50_3_kallisto",
+  "A_OP50_1_kallisto", "A_OP50_2_kallisto", "A_OP50_3_kallisto",
+  "B_OP50_1_kallisto", "B_OP50_2_kallisto", "B_OP50_3_kallisto",
+  "C_OP50_1_kallisto", "C_OP50_2_kallisto", "C_OP50_3_kallisto"
+)
+
+# Create file paths based on the sample names
+files <- file.path(dir, sample_names)
+
+# Assign names to the files vector
+names(files) <- sample_names
+
+```
+
+```{r}
+s2c<-read.csv("../metadata.csv", stringsAsFactors=FALSE)
+```
+#Now the directories must be appended in a new column to the table describing the experiment. This column must be labeled path, otherwise sleuth will report an error. This is to ensure that samples can be associated with kallisto quantifications.
+```{r}
+s2c <- mutate(s2c, path = files)
+s2c
+```
+#Next, the “sleuth object” can be constructed. This object will store not only the information about the experiment, but also details of the model to be used for differential testing, and the results. It is prepared and used with four commands that (1) load the kallisto processed data into the object (2) estimate parameters for the sleuth response error measurement (full) model (3) estimate parameters for the sleuth reduced model, and (4) perform differential analysis (testing) using the likelihood ratio test. On a laptop the four steps should take about a few minutes altogether. The sleuth object must first be initialized with
+```{r}
+so <- sleuth_prep(s2c, extra_bootstrap_summary = TRUE)
+```
+#Then the full model is fit with
+```{r}
+so <- sleuth_fit(so, ~bacteria + strain, 'full')
+```
+#To test for transcripts that are differential expressed between the conditions, sleuth performs a second fit to a “reduced” model that presumes abundances are equal in the two conditions. To identify differential expressed transcripts sleuth will then identify transcripts with a significantly better fit with the “full” model.
+
+#In our case the “reduced” model is
+```{r}
+so <- sleuth_fit(so, ~bacteria, 'reduced')
+```
+#Performing lrt test
+```{r}
+so <- sleuth_lrt(so, 'reduced', 'full')
+full_results <- sleuth_results(so, 'reduced:full', 'lrt', show_all = FALSE)
+```
+#note: qval := p.adjust(pval, 'BH') i.e q-values are BH corrected pavlues. Find more at https://github.com/pachterlab/sleuth/blob/master/R/model.R
+```{r}
+sleuth_significant <- dplyr::filter(full_results, qval <= 0.01)
+write.csv(sleuth_significant, "sleuth_results_q_is_0.01_bacteria+strain_in_full_and_bacteria_in_reduced_Formula.csv")
+```
+```{r}
+sleuth_significant2 <- dplyr::filter(full_results, qval <= 0.003)
+write.csv(sleuth_significant2, "sleuth_results_q_is_0.003_bacteria+strain_in_full_and_bacteria_in_reduced_Formula.csv")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
